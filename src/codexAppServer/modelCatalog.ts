@@ -253,6 +253,7 @@ function createRuntimeModelEntry(params: {
     advanced: {
       temperature: DEFAULT_TEMPERATURE,
       maxTokens: DEFAULT_MAX_TOKENS,
+      fastMode: false,
     },
   };
 }

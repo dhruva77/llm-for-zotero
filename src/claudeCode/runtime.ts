@@ -128,6 +128,7 @@ export function getClaudeRuntimeModelEntries(): RuntimeModelEntry[] {
     advanced: {
       temperature: 0.7,
       maxTokens: 8192,
+      fastMode: false,
     },
   }));
 }

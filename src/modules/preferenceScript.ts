@@ -1512,6 +1512,7 @@ export async function registerPrefsScripts(_window: Window | undefined | null) {
                       maxTokens: existing.maxTokens,
                       inputTokenCap: existing.inputTokenCap,
                       inputMode: existing.inputMode,
+                      fastMode: existing.fastMode,
                     }
                   : undefined,
                 m.protocol,
@@ -1756,6 +1757,21 @@ export async function registerPrefsScripts(_window: Window | undefined | null) {
             : "",
           "optional",
         );
+        const fastModeFieldWrap = el(
+          doc,
+          "label",
+          "display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding-bottom: 1px; cursor: pointer;",
+        );
+        const fastModeCheckbox = el(doc, "input") as HTMLInputElement;
+        fastModeCheckbox.type = "checkbox";
+        fastModeCheckbox.checked = modelEntry.fastMode === true;
+        const fastModeLabel = el(
+          doc,
+          "span",
+          "font-size: 10.5px; font-weight: 600; color: var(--fill-primary, inherit);",
+          t("Fast mode"),
+        );
+        fastModeFieldWrap.append(fastModeCheckbox, fastModeLabel);
 
         const inputModeOptions = getModelInputModeOptionsForRuntime(
           group.authMode,
@@ -1831,12 +1847,17 @@ export async function registerPrefsScripts(_window: Window | undefined | null) {
           protocolFieldWrap.style.display = "none";
         }
 
-        advFields.append(tempField.wrap, maxTokField.wrap, inputCapField.wrap);
+        advFields.append(
+          tempField.wrap,
+          maxTokField.wrap,
+          inputCapField.wrap,
+          fastModeFieldWrap,
+        );
         if (inputModeFieldWrap) advFields.append(inputModeFieldWrap);
         advFields.append(protocolFieldWrap);
         const inputModeHelpText = inputModeFieldWrap
-          ? "Temperature: randomness (0–2)  ·  Max tokens: output limit  ·  Input cap: context limit  ·  Input mode: auto/text-only/vision"
-          : "Temperature: randomness (0–2)  ·  Max tokens: output limit  ·  Input cap: context limit (optional)";
+          ? "Temperature: randomness (0–2)  ·  Max tokens: output limit  ·  Input cap: context limit  ·  Input mode: auto/text-only/vision  ·  Fast mode: priority tier on supported Responses requests"
+          : "Temperature: randomness (0–2)  ·  Max tokens: output limit  ·  Input cap: context limit (optional)  ·  Fast mode: priority tier on supported Responses requests";
         advRow.append(
           advFields,
           el(
@@ -1867,6 +1888,7 @@ export async function registerPrefsScripts(_window: Window | undefined | null) {
           } else {
             delete modelEntry.inputMode;
           }
+          modelEntry.fastMode = fastModeCheckbox.checked;
           modelEntry.providerProtocol = isProviderProtocol(
             protocolFieldSelect.value,
           )
@@ -1893,6 +1915,7 @@ export async function registerPrefsScripts(_window: Window | undefined | null) {
           f.input.addEventListener("blur", commitAdvanced);
         }
         inputModeSelect?.addEventListener("change", commitAdvanced);
+        fastModeCheckbox.addEventListener("change", commitAdvanced);
         protocolFieldSelect.addEventListener("change", commitAdvanced);
 
         const syncAdvAvailability = () => {
@@ -1902,6 +1925,7 @@ export async function registerPrefsScripts(_window: Window | undefined | null) {
           for (const f of [tempField, maxTokField, inputCapField])
             f.input.disabled = !hasModel;
           if (inputModeSelect) inputModeSelect.disabled = !hasModel;
+          fastModeCheckbox.disabled = !hasModel;
           protocolFieldSelect.disabled = !hasModel;
         };
         syncAdvAvailability();

@@ -134,6 +134,13 @@ multimodal model for figures and a text model for summaries. The conversation
 panel also supports model-specific reasoning levels and hyperparameters such as
 `temperature` and `max_tokens_output`.
 
+For Responses-style OpenAI and Codex requests, advanced model settings include a
+per-model **Fast mode** toggle. When enabled, the plugin preserves the model
+slug and sends `service_tier: "priority"` on supported Responses payloads.
+
+Completed assistant messages show `HH:MM · N.N tps` beside the timestamp when
+the provider reports authoritative completion-token usage for that response.
+
 <a id="features"></a>
 
 ## Demos
@@ -200,6 +207,9 @@ Markdown, and customize quick-action presets for repeated research tasks.
 <p align="center">
   <img src="./assets/save_chat.gif" alt="Animation showing conversation export to Zotero notes with markdown" width="1024" />
 </p>
+
+Completed assistant messages can show compact TPS telemetry beside their
+timestamp when the provider returns authoritative usage data.
 
 <p align="center">
   <img src="./assets/shortcuts.gif" alt="Animation showing custom quick-action preset configuration" width="1024" />

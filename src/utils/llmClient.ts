@@ -139,6 +139,8 @@ export type ChatParams = {
   inputTokenCap?: number;
   /** Optional per-model input capability override. Missing means auto. */
   inputMode?: ModelInputMode;
+  /** Enable provider fast mode on supported Responses-style requests. */
+  fastMode?: boolean;
   /** Local files to upload and attach when using Responses API */
   attachments?: ChatFileAttachment[];
   /** Extra system-only guidance added to the same request */
@@ -2603,6 +2605,7 @@ function createChatPayloadBuilder(params: {
   providerProtocol?: ProviderProtocol;
   effectiveTemperature: number;
   effectiveMaxTokens: number;
+  fastMode?: boolean;
   stream: boolean;
   contextCache?: ContextCachePlan;
 }) {
@@ -2616,6 +2619,7 @@ function createChatPayloadBuilder(params: {
     providerProtocol,
     effectiveTemperature,
     effectiveMaxTokens,
+    fastMode,
     stream,
     contextCache,
   } = params;
@@ -2653,9 +2657,10 @@ function createChatPayloadBuilder(params: {
         model,
         ...responsesInput,
         instructions: codexInstructionsParts.join("\n\n"),
-        ...(codexReasoningEffort
-          ? { reasoning: { effort: codexReasoningEffort, summary: "detailed" } }
-          : {}),
+          ...(codexReasoningEffort
+            ? { reasoning: { effort: codexReasoningEffort, summary: "detailed" } }
+            : {}),
+        ...buildResponsesServiceTierParam(fastMode),
         store: false,
         stream: true,
       };
@@ -2681,6 +2686,7 @@ function createChatPayloadBuilder(params: {
           ...responsesInput,
           ...cachePayloadHints,
           ...reasoningPayload.extra,
+          ...buildResponsesServiceTierParam(fastMode),
           ...temperatureParam,
           ...buildResponsesTokenParam(effectiveMaxTokens),
         }
@@ -2703,6 +2709,12 @@ function createChatPayloadBuilder(params: {
     }
     return payload as Record<string, unknown>;
   };
+}
+
+export function buildResponsesServiceTierParam(fastMode?: boolean): {
+  service_tier?: "priority";
+} {
+  return fastMode ? { service_tier: "priority" } : {};
 }
 
 function stripTemperature(payload: Record<string, unknown>) {
@@ -3367,6 +3379,7 @@ export async function callLLM(params: ChatParams): Promise<string> {
     providerProtocol,
     effectiveTemperature,
     effectiveMaxTokens,
+    fastMode: params.fastMode,
     stream: false,
     contextCache: params.contextCache,
   });
@@ -3502,6 +3515,7 @@ export async function callLLMStream(
     providerProtocol,
     effectiveTemperature,
     effectiveMaxTokens,
+    fastMode: params.fastMode,
     stream: true,
     contextCache: params.contextCache,
   });

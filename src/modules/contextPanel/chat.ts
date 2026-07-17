@@ -202,6 +202,7 @@ import { agentRunTraceCache, agentRunTraceLoadingTasks } from "./agentState";
 import {
   sanitizeText,
   formatTime,
+  formatTps,
   setStatus,
   setTokenUsage,
   getSelectedTextWithinBubble,
@@ -1762,6 +1763,9 @@ function toPanelMessage(message: StoredChatMessage): Message {
     role: message.role,
     text: message.text,
     timestamp: message.timestamp,
+    completionTokens: message.completionTokens,
+    responseElapsedMs: message.responseElapsedMs,
+    responseTps: message.responseTps,
     runMode: message.runMode,
     agentRunId: message.agentRunId,
     selectedText: selectedTexts[0] || message.selectedText,
@@ -3722,6 +3726,9 @@ type AssistantMessageSnapshot = Pick<
   Message,
   | "text"
   | "timestamp"
+  | "completionTokens"
+  | "responseElapsedMs"
+  | "responseTps"
   | "modelName"
   | "modelEntryId"
   | "modelProviderLabel"
@@ -3754,6 +3761,9 @@ function takeAssistantSnapshot(message: Message): AssistantMessageSnapshot {
   return {
     text: message.text,
     timestamp: message.timestamp,
+    completionTokens: message.completionTokens,
+    responseElapsedMs: message.responseElapsedMs,
+    responseTps: message.responseTps,
     modelName: message.modelName,
     modelEntryId: message.modelEntryId,
     modelProviderLabel: message.modelProviderLabel,
@@ -3783,6 +3793,9 @@ function restoreAssistantSnapshot(
 ): void {
   message.text = snapshot.text;
   message.timestamp = snapshot.timestamp;
+  message.completionTokens = snapshot.completionTokens;
+  message.responseElapsedMs = snapshot.responseElapsedMs;
+  message.responseTps = snapshot.responseTps;
   message.modelName = snapshot.modelName;
   message.modelEntryId = snapshot.modelEntryId;
   message.modelProviderLabel = snapshot.modelProviderLabel;
@@ -3817,6 +3830,9 @@ function finalizeCancelledAssistantMessage(
 
   message.text = text || fallbackText;
   message.timestamp = Date.now();
+  message.completionTokens = undefined;
+  message.responseElapsedMs = undefined;
+  message.responseTps = undefined;
   message.reasoningSummary = reasoningSummary || undefined;
   message.reasoningDetails = reasoningDetails || undefined;
   message.reasoningOpen = hasReasoning
@@ -3826,6 +3842,27 @@ function finalizeCancelledAssistantMessage(
   message.streaming = false;
   message.webchatRunState = undefined;
   message.webchatCompletionReason = null;
+}
+
+function applyAssistantUsageTelemetry(
+  message: Message,
+  usage: UsageStats | undefined,
+  requestStartedAt: number,
+): void {
+  const completionTokens = Math.max(
+    0,
+    Math.floor(Number(usage?.completionTokens) || 0),
+  );
+  if (completionTokens <= 0) {
+    message.completionTokens = undefined;
+    message.responseElapsedMs = undefined;
+    message.responseTps = undefined;
+    return;
+  }
+  const elapsedMs = Math.max(1, Date.now() - requestStartedAt);
+  message.completionTokens = completionTokens;
+  message.responseElapsedMs = elapsedMs;
+  message.responseTps = completionTokens / (elapsedMs / 1000);
 }
 
 type CodexNativeTraceItemEvent = {
@@ -5854,6 +5891,9 @@ export async function retryLatestAssistantResponse(
   const assistantMessage = retryPair.assistantMessage;
   const assistantSnapshot = takeAssistantSnapshot(assistantMessage);
   assistantMessage.text = "";
+  assistantMessage.completionTokens = undefined;
+  assistantMessage.responseElapsedMs = undefined;
+  assistantMessage.responseTps = undefined;
   assistantMessage.reasoningSummary = undefined;
   assistantMessage.reasoningDetails = undefined;
   assistantMessage.reasoningOpen = isReasoningExpandedByDefault();
@@ -5995,6 +6035,9 @@ export async function retryLatestAssistantResponse(
       {
         text: assistantMessage.text,
         timestamp: assistantMessage.timestamp,
+        completionTokens: assistantMessage.completionTokens,
+        responseElapsedMs: assistantMessage.responseElapsedMs,
+        responseTps: assistantMessage.responseTps,
         runMode: assistantMessage.runMode,
         agentRunId: assistantMessage.agentRunId,
         modelName: assistantMessage.modelName,
@@ -6217,6 +6260,7 @@ export async function retryLatestAssistantResponse(
       maxTokens: effectiveRequestConfig.advanced?.maxTokens,
       inputTokenCap: effectiveRequestConfig.advanced?.inputTokenCap,
       inputMode: effectiveRequestConfig.advanced?.inputMode,
+      fastMode: effectiveRequestConfig.advanced?.fastMode,
       contextCache: contextPlan.contextCache,
     };
     const { finalPrepared, systemMessages, workflowTestIntercepted } =
@@ -6239,6 +6283,8 @@ export async function retryLatestAssistantResponse(
       source: "estimated",
     });
     renderContextUsageSnapshot(body, ui.tokenUsageEl, estimatedContextSnapshot);
+    const requestStartedAt = Date.now();
+    let latestUsage: UsageStats | undefined;
 
     responseStreamCoalescer = createBlockStreamCoalescer({
       onBlock: (chunk) => {
@@ -6270,6 +6316,7 @@ export async function retryLatestAssistantResponse(
       queueRefresh();
     };
     const handleUsage = (usage: UsageStats) => {
+      latestUsage = usage;
       recordContextCacheTelemetry(contextPlan.contextCache, usage);
       const contextTokens =
         typeof usage.contextTokens === "number" && usage.contextTokens > 0
@@ -6461,6 +6508,11 @@ export async function retryLatestAssistantResponse(
     });
     codexActivityTrace?.finish(assistantMessage.text);
     assistantMessage.timestamp = Date.now();
+    applyAssistantUsageTelemetry(
+      assistantMessage,
+      latestUsage,
+      requestStartedAt,
+    );
     assistantMessage.modelName = effectiveRequestConfig.model;
     assistantMessage.modelEntryId = effectiveRequestConfig.modelEntryId;
     assistantMessage.modelProviderLabel =
@@ -6481,6 +6533,9 @@ export async function retryLatestAssistantResponse(
       {
         text: assistantMessage.text,
         timestamp: assistantMessage.timestamp,
+        completionTokens: assistantMessage.completionTokens,
+        responseElapsedMs: assistantMessage.responseElapsedMs,
+        responseTps: assistantMessage.responseTps,
         runMode: assistantMessage.runMode,
         agentRunId: assistantMessage.agentRunId,
         modelName: assistantMessage.modelName,
@@ -8124,6 +8179,9 @@ export async function sendQuestion(
   const assistantMessage: Message = {
     ...optimisticAssistantMessage,
     timestamp: optimisticAssistantMessage.timestamp,
+    completionTokens: undefined,
+    responseElapsedMs: undefined,
+    responseTps: undefined,
     runMode: isCodexNativeTurn ? "agent" : effectiveRuntimeMode,
     agentRunId: agentRunId || undefined,
     modelName: effectiveRequestConfig.model,
@@ -8163,6 +8221,9 @@ export async function sendQuestion(
         role: "assistant",
         text: assistantMessage.text,
         timestamp: assistantMessage.timestamp,
+        completionTokens: assistantMessage.completionTokens,
+        responseElapsedMs: assistantMessage.responseElapsedMs,
+        responseTps: assistantMessage.responseTps,
         runMode: assistantMessage.runMode,
         agentRunId: assistantMessage.agentRunId,
         modelName: assistantMessage.modelName,
@@ -8457,6 +8518,7 @@ export async function sendQuestion(
       maxTokens: effectiveRequestConfig.advanced?.maxTokens,
       inputTokenCap: effectiveRequestConfig.advanced?.inputTokenCap,
       inputMode: effectiveRequestConfig.advanced?.inputMode,
+      fastMode: effectiveRequestConfig.advanced?.fastMode,
       contextCache: contextPlan.contextCache,
     };
     const { finalPrepared, systemMessages, workflowTestIntercepted } =
@@ -8479,6 +8541,8 @@ export async function sendQuestion(
       source: "estimated",
     });
     renderContextUsageSnapshot(body, ui.tokenUsageEl, estimatedContextSnapshot);
+    const requestStartedAt = Date.now();
+    let latestUsage: UsageStats | undefined;
 
     const handleDelta = (delta: string) => {
       const chunk = sanitizeText(delta);
@@ -8502,6 +8566,7 @@ export async function sendQuestion(
       queueRefresh();
     };
     const handleUsage = (usage: UsageStats) => {
+      latestUsage = usage;
       recordContextCacheTelemetry(contextPlan.contextCache, usage);
       const contextTokens =
         typeof usage.contextTokens === "number" && usage.contextTokens > 0
@@ -8691,6 +8756,11 @@ export async function sendQuestion(
       citationPaperContexts: contextPlan.citationPaperContexts,
     });
     codexActivityTrace?.finish(assistantMessage.text);
+    applyAssistantUsageTelemetry(
+      assistantMessage,
+      latestUsage,
+      requestStartedAt,
+    );
     assistantMessage.runMode = isCodexNativeTurn
       ? "agent"
       : effectiveRuntimeMode;
@@ -10169,6 +10239,15 @@ export function refreshChat(body: Element, item?: Zotero.Item | null) {
     time.className = "llm-message-time";
     time.textContent = formatTime(msg.timestamp);
     meta.appendChild(time);
+    if (!isUser) {
+      const formattedTps = formatTps(msg.responseTps);
+      if (formattedTps) {
+        const tps = doc.createElement("span") as HTMLSpanElement;
+        tps.className = "llm-message-time";
+        tps.textContent = `· ${formattedTps}`;
+        meta.appendChild(tps);
+      }
+    }
     if (isUser && shouldShowUserFooterCopyAction(msg)) {
       const actions = doc.createElement("div") as HTMLDivElement;
       actions.className = "llm-message-actions";

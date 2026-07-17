@@ -357,6 +357,14 @@ export function formatTime(timestamp: number) {
   return `${hour}:${minute} ${month}/${day}/${year}`;
 }
 
+export function formatTps(tps: number | undefined): string {
+  if (!Number.isFinite(tps) || (tps || 0) <= 0) return "";
+  const normalized = Number(tps);
+  if (normalized >= 100) return `${Math.round(normalized)} tps`;
+  if (normalized >= 10) return `${normalized.toFixed(1).replace(/\.0$/, "")} tps`;
+  return `${normalized.toFixed(2).replace(/\.?0+$/, "")} tps`;
+}
+
 export function getAttachmentTypeLabel(entry: {
   name?: string;
   mimeType?: string;

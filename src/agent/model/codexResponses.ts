@@ -1,4 +1,5 @@
 import {
+  buildResponsesServiceTierParam,
   buildReasoningPayload,
   buildPromptCachePayloadHints,
   postWithReasoningFallback,
@@ -126,6 +127,7 @@ export class CodexResponsesAgentAdapter implements AgentModelAdapter {
           tool_choice: "auto",
           store: false,
           stream: true,
+          ...buildResponsesServiceTierParam(request.advanced?.fastMode),
           ...reasoningPayload.extra,
           ...(reasoningPayload.omitTemperature
             ? {}

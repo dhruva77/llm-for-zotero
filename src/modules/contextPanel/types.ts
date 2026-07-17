@@ -54,6 +54,9 @@ export interface Message {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  completionTokens?: number;
+  responseElapsedMs?: number;
+  responseTps?: number;
   runMode?: "chat" | "agent";
   agentRunId?: string;
   selectedText?: string;

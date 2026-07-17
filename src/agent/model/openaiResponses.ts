@@ -1,4 +1,5 @@
 import {
+  buildResponsesServiceTierParam,
   buildReasoningPayload,
   buildPromptCachePayloadHints,
   postWithReasoningFallback,
@@ -139,6 +140,7 @@ export class OpenAIResponsesAgentAdapter implements AgentModelAdapter {
             request.advanced?.maxTokens,
             request.model,
           ),
+          ...buildResponsesServiceTierParam(request.advanced?.fastMode),
           ...reasoningPayload.extra,
           ...(reasoningPayload.omitTemperature
             ? {}

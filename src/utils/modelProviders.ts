@@ -26,6 +26,7 @@ export type AdvancedModelConfig = {
   maxTokens: number;
   inputTokenCap?: number;
   inputMode?: ModelInputMode;
+  fastMode: boolean;
 };
 
 export type ModelProviderModel = AdvancedModelConfig & {
@@ -84,6 +85,7 @@ type AdvancedModelConfigInput = {
   maxTokens?: number | string | null;
   inputTokenCap?: number | string | null;
   inputMode?: unknown;
+  fastMode?: unknown;
 };
 
 type ZoteroPrefsAPI = {
@@ -139,6 +141,16 @@ function normalizeApiBase(apiBase: string): string {
   return normalizeString(apiBase).replace(/\/+$/, "");
 }
 
+function normalizeBoolean(value: unknown, defaultValue = false): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return defaultValue;
+}
+
 function normalizeProviderAuthMode(value: unknown): ModelProviderAuthMode {
   if (value === "codex_auth") return "codex_auth";
   if (value === "codex_app_server") return "codex_app_server";
@@ -166,6 +178,7 @@ function normalizeAdvancedModelConfig(
     ),
     inputTokenCap: normalizeOptionalInputTokenCap(value?.inputTokenCap),
     ...(inputMode ? { inputMode } : {}),
+    fastMode: normalizeBoolean(value?.fastMode, false),
   };
 }
 
@@ -293,6 +306,7 @@ function normalizeGroupModel(
     maxTokens?: unknown;
     inputTokenCap?: unknown;
     inputMode?: unknown;
+    fastMode?: unknown;
     providerProtocol?: unknown;
   };
   const modelName = normalizeString(rawModel.model);
@@ -302,6 +316,7 @@ function normalizeGroupModel(
       maxTokens: Number(rawModel.maxTokens),
       inputTokenCap: rawModel.inputTokenCap as number | string | undefined,
       inputMode: rawModel.inputMode,
+      fastMode: rawModel.fastMode,
     },
     modelName,
     authMode,
@@ -452,6 +467,7 @@ function resolveLegacyModelSlot(
     temperature,
     maxTokens,
     inputTokenCap,
+    fastMode: false,
   };
 }
 

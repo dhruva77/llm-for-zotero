@@ -49,6 +49,7 @@ export type AdvancedModelParams = {
   maxTokens: number;
   inputTokenCap?: number;
   inputMode?: ModelInputMode;
+  fastMode?: boolean;
 };
 
 export type PaperContextRef = {

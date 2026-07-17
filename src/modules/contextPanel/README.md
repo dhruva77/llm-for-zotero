@@ -7,7 +7,7 @@ This folder implements the reader/library side-panel chat experience.
 - `index.ts`: registration entrypoint (panel section, style injection, reader popup selection tracking).
 - `buildUI.ts`: static panel DOM construction.
 - `setupHandlers.ts`: runtime orchestration and event wiring across panel features.
-- `chat.ts`: conversation load/render/send/retry/edit and streaming orchestration.
+- `chat.ts`: conversation load/render/send/retry/edit and streaming orchestration, including assistant footer metadata such as per-response TPS.
 - `contextResolution.ts`: active context resolution and selected-text context state updates.
 - `pdfContext.ts`: PDF text extraction/caching and context candidate/full-text builders.
 - `multiContextPlanner.ts`: adaptive budget-first context planning across multiple papers.
@@ -41,3 +41,5 @@ This folder implements the reader/library side-panel chat experience.
 - Keep exported signatures stable for plugin entrypoints and persistence helpers.
 - Keep DOM IDs/class names stable to preserve CSS and event behavior.
 - Keep persistence schema/pref keys stable to avoid user data regressions.
+- Keep assistant footer metadata compact. The current design uses `time · tps` only when authoritative response usage exists.
+- Keep global status-bar token usage session-scoped; response-scoped TPS belongs to the assistant message footer, not the global footer.

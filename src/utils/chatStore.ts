@@ -82,6 +82,9 @@ export type StoredChatMessage = {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  completionTokens?: number;
+  responseElapsedMs?: number;
+  responseTps?: number;
   runMode?: "chat" | "agent";
   agentRunId?: string;
   selectedText?: string;
@@ -151,6 +154,9 @@ const CHAT_MESSAGE_SELECT_COLUMNS_SQL = `id,
             role,
             text,
             timestamp,
+            completion_tokens AS completionTokens,
+            response_elapsed_ms AS responseElapsedMs,
+            response_tps AS responseTps,
             run_mode AS runMode,
             agent_run_id AS agentRunId,
             selected_text AS selectedText,
@@ -402,6 +408,9 @@ const CHAT_MESSAGE_COPY_COLUMNS = [
   "role",
   "text",
   "timestamp",
+  "completion_tokens",
+  "response_elapsed_ms",
+  "response_tps",
   "run_mode",
   "agent_run_id",
   "selected_text",
@@ -1107,6 +1116,9 @@ export async function initChatStore(): Promise<void> {
         role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
         text TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
+        completion_tokens INTEGER,
+        response_elapsed_ms INTEGER,
+        response_tps REAL,
         run_mode TEXT CHECK(run_mode IN ('chat', 'agent')),
         agent_run_id TEXT,
         selected_text TEXT,
@@ -1158,6 +1170,24 @@ export async function initChatStore(): Promise<void> {
       messageColumns,
       "conversation_id",
       "conversation_id TEXT",
+    );
+    await ensureColumn(
+      CHAT_MESSAGES_TABLE,
+      messageColumns,
+      "completion_tokens",
+      "completion_tokens INTEGER",
+    );
+    await ensureColumn(
+      CHAT_MESSAGES_TABLE,
+      messageColumns,
+      "response_elapsed_ms",
+      "response_elapsed_ms INTEGER",
+    );
+    await ensureColumn(
+      CHAT_MESSAGES_TABLE,
+      messageColumns,
+      "response_tps",
+      "response_tps REAL",
     );
     const hasModelNameColumn = Boolean(
       columns?.some((column) => column?.name === "model_name"),
@@ -1561,6 +1591,9 @@ export async function loadConversation(
         role: unknown;
         text: unknown;
         timestamp: unknown;
+        completionTokens?: unknown;
+        responseElapsedMs?: unknown;
+        responseTps?: unknown;
         selectedText?: unknown;
         runMode?: unknown;
         agentRunId?: unknown;
@@ -1848,6 +1881,15 @@ export async function loadConversation(
       role,
       text: typeof row.text === "string" ? row.text : "",
       timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+      completionTokens: Number.isFinite(Number(row.completionTokens))
+        ? Math.max(0, Math.floor(Number(row.completionTokens)))
+        : undefined,
+      responseElapsedMs: Number.isFinite(Number(row.responseElapsedMs))
+        ? Math.max(0, Math.floor(Number(row.responseElapsedMs)))
+        : undefined,
+      responseTps: Number.isFinite(Number(row.responseTps))
+        ? Math.max(0, Number(row.responseTps))
+        : undefined,
       runMode:
         row.runMode === "agent"
           ? "agent"
@@ -2006,14 +2048,23 @@ export async function appendMessage(
   await Zotero.DB.executeTransaction(async () => {
     await Zotero.DB.queryAsync(
       `INSERT INTO ${CHAT_MESSAGES_TABLE}
-        (conversation_id, conversation_key, role, text, timestamp, run_mode, agent_run_id, selected_text, selected_text_contexts_json, selected_texts_json, selected_text_sources_json, selected_text_paper_contexts_json, selected_text_note_contexts_json, forced_skill_ids_json, paper_contexts_json, pdf_paper_contexts_json, full_text_paper_contexts_json, citation_paper_contexts_json, quote_citations_json, collection_contexts_json, tag_contexts_json, screenshot_images, attachments_json, model_attachments_json, generated_images_json, model_name, model_entry_id, model_provider_label, webchat_run_state, webchat_completion_reason, reasoning_summary, reasoning_details, context_tokens, context_window)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (conversation_id, conversation_key, role, text, timestamp, completion_tokens, response_elapsed_ms, response_tps, run_mode, agent_run_id, selected_text, selected_text_contexts_json, selected_texts_json, selected_text_sources_json, selected_text_paper_contexts_json, selected_text_note_contexts_json, forced_skill_ids_json, paper_contexts_json, pdf_paper_contexts_json, full_text_paper_contexts_json, citation_paper_contexts_json, quote_citations_json, collection_contexts_json, tag_contexts_json, screenshot_images, attachments_json, model_attachments_json, generated_images_json, model_name, model_entry_id, model_provider_label, webchat_run_state, webchat_completion_reason, reasoning_summary, reasoning_details, context_tokens, context_window)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         conversationID,
         normalizedKey,
         message.role,
         message.text,
         Number.isFinite(timestamp) ? Math.floor(timestamp) : Date.now(),
+        Number.isFinite(Number(message.completionTokens))
+          ? Math.max(0, Math.floor(Number(message.completionTokens)))
+          : null,
+        Number.isFinite(Number(message.responseElapsedMs))
+          ? Math.max(0, Math.floor(Number(message.responseElapsedMs)))
+          : null,
+        Number.isFinite(Number(message.responseTps))
+          ? Math.max(0, Number(message.responseTps))
+          : null,
         message.runMode || null,
         message.agentRunId || null,
         selectedTexts[0] || message.selectedText || null,
@@ -2154,6 +2205,9 @@ export async function updateLatestUserMessage(
       `UPDATE ${CHAT_MESSAGES_TABLE}
        SET text = ?,
            timestamp = ?,
+           completion_tokens = ?,
+           response_elapsed_ms = ?,
+           response_tps = ?,
            run_mode = ?,
            agent_run_id = ?,
            selected_text = ?,
@@ -2234,6 +2288,9 @@ export async function updateLatestAssistantMessage(
     StoredChatMessage,
     | "text"
     | "timestamp"
+    | "completionTokens"
+    | "responseElapsedMs"
+    | "responseTps"
     | "runMode"
     | "agentRunId"
     | "modelName"
@@ -2263,6 +2320,9 @@ export async function updateLatestAssistantMessage(
       `UPDATE ${CHAT_MESSAGES_TABLE}
        SET text = ?,
            timestamp = ?,
+           completion_tokens = ?,
+           response_elapsed_ms = ?,
+           response_tps = ?,
            run_mode = ?,
            agent_run_id = ?,
            model_name = ?,
@@ -2286,6 +2346,15 @@ export async function updateLatestAssistantMessage(
       [
         message.text || "",
         Number.isFinite(timestamp) ? Math.floor(timestamp) : Date.now(),
+        Number.isFinite(Number(message.completionTokens))
+          ? Math.max(0, Math.floor(Number(message.completionTokens)))
+          : null,
+        Number.isFinite(Number(message.responseElapsedMs))
+          ? Math.max(0, Math.floor(Number(message.responseElapsedMs)))
+          : null,
+        Number.isFinite(Number(message.responseTps))
+          ? Math.max(0, Number(message.responseTps))
+          : null,
         message.runMode || null,
         message.agentRunId || null,
         message.modelName || null,
