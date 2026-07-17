@@ -18,6 +18,20 @@ function makeItem(id: number): Zotero.Item {
   } as unknown as Zotero.Item;
 }
 
+function makeLinkedWebAttachment(id: number): Zotero.Item {
+  return {
+    id,
+    libraryID: 1,
+    parentID: 10,
+    attachmentLinkMode: 3,
+    attachmentPath: "https://example.com/article",
+    isRegularItem: () => false,
+    isAttachment: () => true,
+    getField: (field: string) =>
+      field === "title" ? "Example article" : "https://example.com/article",
+  } as unknown as Zotero.Item;
+}
+
 describe("Zotero item context menu dispatch", function () {
   afterEach(function () {
     clearContextSurfaceActionTargetsForTests();
@@ -42,10 +56,10 @@ describe("Zotero item context menu dispatch", function () {
       openStandaloneChat: () => undefined,
     });
 
-    assert.lengthOf(registrations, 3);
+    assert.lengthOf(registrations, 4);
     assert.deepEqual(
       registrations.map((registration) => registration.menu),
-      ["item", "item", "item"],
+      ["item", "item", "item", "item"],
     );
     assert.equal(registrations[0].options.tag, "menuseparator");
     assert.equal(registrations[1].options.tag, "menuitem");
@@ -53,7 +67,49 @@ describe("Zotero item context menu dispatch", function () {
       registrations[1].options.label,
       "Add Items as Context to LLM-for-Zotero",
     );
-    assert.equal(registrations[2].options.tag, "menuseparator");
+    assert.equal(
+      registrations[2].options.label,
+      "Capture Web Snapshot and Add to LLM-for-Zotero",
+    );
+    assert.equal(registrations[3].options.tag, "menuseparator");
+  });
+
+  it("captures one selected linked web attachment and adds the local snapshot as context", async function () {
+    const attachment = makeLinkedWebAttachment(9);
+    const snapshot = makeItem(11);
+    const registrations: Array<{ options: any }> = [];
+    const opened: Array<{ initialItem?: Zotero.Item | null }> = [];
+    const notifications: Array<{ title: string; message: string }> = [];
+    let captured: Zotero.Item | null = null;
+
+    registerZoteroItemContextMenu({
+      ztoolkit: {
+        Menu: {
+          register: (_menu: string, options: any) => registrations.push({ options }),
+        },
+      } as any,
+      getSelectedItems: () => [attachment],
+      openStandaloneChat: (options) => opened.push(options || {}),
+      captureWebSnapshot: async (item) => {
+        captured = item;
+        return snapshot;
+      },
+      notify: (title, message) => notifications.push({ title, message }),
+    });
+
+    const captureCommand = registrations.find(
+      ({ options }) => options.label === "Capture Web Snapshot and Add to LLM-for-Zotero",
+    )?.options;
+    assert.isFalse(captureCommand.isHidden());
+    captureCommand.commandListener();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(captured, attachment);
+    assert.lengthOf(opened, 1);
+    assert.deepEqual(notifications.map((entry) => entry.title), [
+      "Capturing web snapshot",
+      "Web snapshot saved",
+    ]);
   });
 
   it("opens standalone instead of dispatching to a mounted embedded chat surface", async function () {

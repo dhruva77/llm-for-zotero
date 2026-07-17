@@ -39,6 +39,15 @@ const zhCN: Record<string, string> = {
   "No context to clear": "没有可清除的上下文",
   "Add Items as Context to LLM-for-Zotero":
     "将条目作为上下文添加到 LLM-for-Zotero",
+  "Capture Web Snapshot and Add to LLM-for-Zotero":
+    "捕获网页快照并添加到 LLM-for-Zotero",
+  "Capturing web snapshot": "正在捕获网页快照",
+  "Saving a local copy for Zotero and LLM-for-Zotero…":
+    "正在保存供 Zotero 和 LLM-for-Zotero 使用的本地副本…",
+  "Web snapshot saved": "网页快照已保存",
+  "The local copy has been added to a new LLM-for-Zotero chat.":
+    "本地副本已添加到新的 LLM-for-Zotero 对话。",
+  "Web snapshot could not be saved": "无法保存网页快照",
   "No supported default attachment found": "未找到支持的默认附件",
   Rename: "重命名",
   "Rename chat": "重命名对话",
