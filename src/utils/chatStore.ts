@@ -2205,9 +2205,6 @@ export async function updateLatestUserMessage(
       `UPDATE ${CHAT_MESSAGES_TABLE}
        SET text = ?,
            timestamp = ?,
-           completion_tokens = ?,
-           response_elapsed_ms = ?,
-           response_tps = ?,
            run_mode = ?,
            agent_run_id = ?,
            selected_text = ?,
